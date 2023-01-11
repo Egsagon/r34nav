@@ -1,5 +1,6 @@
 import json
 import requests
+import base_handler as dbase
 from bs4 import BeautifulSoup as bs
 
 vault = json.load(open('vault.json'))
@@ -73,6 +74,8 @@ class Instance:
         self.raw_query: str = None
         self.page = 0
         
+        self.url_list: list[str] = []
+        
     def do_query(self, args: dict = {}) -> str:
         '''
         Create a new query to the target and return the
@@ -86,21 +89,42 @@ class Instance:
         
         self.current_query = query(self.raw_query, self.page)
         
-        return next(self.current_query)
+        return self.do_next()
     
     def do_next(self, args: dict = {}) -> str:
         '''
         Returns the next url to watch.
         '''
         
-        try: return next(self.current_query)
+        try:
+            url = next(self.current_query)
+            self.url_list += [url]
+            return url
 
         except StopIteration:
             # Reached the end of query, create a
             # new one on next page
             
             self.page += 1
-            self.do_query()
+            return self.do_query()
+    
+    def do_upload(self, args: dict = {}) -> bool:
+        '''
+        Save and upload the given image url and update the database.
+        
+        Format:
+            /api/upload&name=1&url=https://example.com
+        '''
+        
+        path = './storage/' + args['name'].replace('/', '')
+        with open(path, 'wb') as f: f.write(requests.get(args['url']))
+        
+        args['name'] = path
+        dbase.upload(args)
+        
+        
+        
+        
     
     # HANDLED BY CLIENT (with ~50 history list)
     # def do_prev(self) -> str: pass

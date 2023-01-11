@@ -1,6 +1,7 @@
 import time
 import uuid
 import scrapper
+from typing import Union, Any
 from http.server import (
     HTTPServer,
     BaseHTTPRequestHandler
@@ -78,19 +79,27 @@ class echoHandler(BaseHTTPRequestHandler):
         if callstring == 'init':
             new = str(uuid.uuid4())
             
-            sessions[new] = {'initialised': time.time()}
+            ip_addr = self.client_address[0]
+            print(sessions)
+            # Check if there already is an instance for this session
+            for sid, session in sessions.items():
+                if session['ip'] == ip_addr:
+                    print('Already existing session')
+                    
+                    # TODO choose between reseting (delete session)
+                    # or handle back same uuid
+                    return self.qsend(200, 'text/plain', sid.encode())
+            
+            sessions[new] = {
+                'initialised':  time.time(),
+                'ip':           self.client_address[0],
+                'instance':     scrapper.Instance(new)
+            }
             
             print('initialised', new)
             
-            self.send_response(200)
-            self.send_header('content-type', 'text/plain')
-            self.end_headers()
-            
-            self.wfile.write(new.encode())
-            
-            # TODO
-            # summon scrapping instance
-            
+            self.qsend(200, 'text/plain', new.encode())
+
             return
         
         else:
@@ -102,30 +111,53 @@ class echoHandler(BaseHTTPRequestHandler):
             # TODO
             # Remove switch case -> comprehension
             
+            
+            print('received request:', type_, '->', args)
+            instance: scrapper.Instance = sessions[session_id]\
+                ['instance']
+            
             if type_ == 'query':
                 # Modify the session object to be focusing on a query
                 
-                print('received query request:', args)
+                response = instance.do_query(args)
                 
+                if response is None:
+                    response = 'no content found'
+                
+                print('got response', response)
+                
+                self.qsend(200, 'text/plain', response.encode())
+            
             if type_ == 'next':
                 # Invoke next iteration
                 
-                print('received query request:', args)
+                response = instance.do_next(args)
                 
-                self.send_response(200)
-                self.send_header('content-type', 'text/plain')
-                self.end_headers()
+                print('sending', response)
                 
-                self.wfile.write('https://example.com'.encode())
+                self.qsend(200, 'text/plain', response.encode())
+
             
             if type_ == 'upload':
                 pass
             
-            print(session_id, '->', type_, args)
-            
+            # print(session_id, '->', type_, args)
+    
+    def qsend(self, code: int, type_: str, text: bytes = None
+                    ) -> None:
+        
+        self.send_response(code)
+        self.send_header('content-type', type_)
+        self.end_headers()
+        
+        if text is not None:
+            self.wfile.write(text)
+        
+        
+    
             
 # List of session
-sessions: dict[uuid.UUID: dict] = {}
+sessions: dict[uuid.UUID: dict[str: Any]] = {}
 
 
 if __name__ == '__main__':
